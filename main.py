@@ -95,9 +95,8 @@ async def on_app_command_error(interaction: Interaction, error):
 async def on_ready():
     try:
         if TARGET_GUILD_ID:
-            guild_obj = discord.Object(id=TARGET_GUILD_ID)
-            synced = await bot.tree.sync(guild=guild_obj)
-            print(f"✅ Comenzi sincronizate pe guild-ul țintă: {TARGET_GUILD_ID} -> {[c.name for c in synced]}")
+            synced = await force_sync_target_guild()
+            print(f"✅ Comenzi sincronizate FORȚAT pe guild-ul țintă: {TARGET_GUILD_ID} -> {[c.name for c in synced]}")
         else:
             # fallback: sincronizare pe fiecare guild (fără copy_global_to, ca să nu dublăm)
             for g in bot.guilds:
@@ -111,6 +110,26 @@ async def on_ready():
     print(f"🔐 Public Key set: {'DA' if PUBLIC_KEY else 'NU'}")
     print(f"🔗 Invite URL (admin): {INVITE_URL}")
     print("🤵 Botul mafiot este online!")
+
+async def force_sync_target_guild(max_retries: int = 3):
+    guild_obj = discord.Object(id=TARGET_GUILD_ID)
+    last_error = None
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            # Refacem lista de comenzi locale pentru guild-ul țintă și sincronizăm explicit.
+            bot.tree.clear_commands(guild=guild_obj)
+            bot.tree.copy_global_to(guild=guild_obj)
+            synced = await bot.tree.sync(guild=guild_obj)
+            print(f"✅ Force sync reușit pe încercarea {attempt}/{max_retries}.")
+            return synced
+        except Exception as e:
+            last_error = e
+            print(f"⚠️ Force sync eșuat ({attempt}/{max_retries}): {e}")
+            if attempt < max_retries:
+                await asyncio.sleep(5)
+
+    raise last_error
 
 # ===== Helpers pentru emoji =====
 def meta_from_emoji(e):
@@ -415,7 +434,10 @@ async def resync(interaction: Interaction):
         if guild is None:
             await interaction.response.send_message("Această comandă trebuie folosită pe server.", ephemeral=True)
             return
-        synced = await bot.tree.sync(guild=discord.Object(id=guild.id))
+        if guild.id == TARGET_GUILD_ID:
+            synced = await force_sync_target_guild()
+        else:
+            synced = await bot.tree.sync(guild=discord.Object(id=guild.id))
         await interaction.response.send_message(
             f"✅ Resync ok. Comenzi pe **{guild.name}**: " + ", ".join(c.name for c in synced),
             ephemeral=True
