@@ -1,3 +1,4 @@
+import os
 import asyncio
 import discord
 from discord.ext import tasks, commands
@@ -23,7 +24,7 @@ INVITE_URL = (
     "&permissions=8&scope=bot%20applications.commands"
 )
 
-TOKEN = "MTUxODc3ODM1MDY3MDMxOTczNg.G2cyPm.SMwxTqBLCDreKUBk4hGBe-yav34uvGrCw_QLck"
+TOKEN = os.getenv("DISCORD_TOKEN", "")
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents, application_id=APPLICATION_ID)
