@@ -1,5 +1,3 @@
-import os
-import sys
 import asyncio
 import discord
 from discord.ext import tasks, commands
@@ -16,16 +14,19 @@ SECONDARY_LEADER_ROLE_ID = 1515017621127299303
 COLEADER_ROLE_ID = 1107099637644529684
 ALLOWED_ROLE_IDS = {LEADER_ROLE_ID, SECONDARY_LEADER_ROLE_ID, COLEADER_ROLE_ID}
 
-# Verificare token
-TOKEN = os.getenv("DISCORD_TOKEN")
-if not TOKEN:
-    print("❌ EROARE: DISCORD_TOKEN nu este setat! Verifică variabila de mediu în Railway.")
-    sys.exit()
-else:
-    print("✅ Tokenul a fost găsit. Botul pornește.")
+# === CONFIG BOT / SERVER ===
+APPLICATION_ID = 1518778350670319736
+TARGET_GUILD_ID = 1107074840378220645
+PUBLIC_KEY = "bd7f76a55de869fea03a3e21cdf034cd376095dd9e309544d11d6a92cf98e018"
+INVITE_URL = (
+    f"https://discord.com/oauth2/authorize?client_id={APPLICATION_ID}"
+    "&permissions=8&scope=bot%20applications.commands"
+)
+
+TOKEN = "MTUxODc3ODM1MDY3MDMxOTczNg.G2cyPm.SMwxTqBLCDreKUBk4hGBe-yav34uvGrCw_QLck"
 
 intents = discord.Intents.all()
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="!", intents=intents, application_id=APPLICATION_ID)
 
 DATA_FILE = "backup.txt"
 TICKET_DATA = {}
@@ -38,7 +39,7 @@ def home():
     return "✅ Donul veghează. Botul este online."
 
 def run_flask():
-    port = int(os.getenv("PORT", "8080"))
+    port = 8080
     app.run(host='0.0.0.0', port=port)
 
 def save_backup():
@@ -92,13 +93,22 @@ async def on_app_command_error(interaction: Interaction, error):
 @bot.event
 async def on_ready():
     try:
-        # sincronizare pe fiecare guild (fără copy_global_to, ca să nu dublăm)
-        for g in bot.guilds:
-            synced = await bot.tree.sync(guild=discord.Object(id=g.id))
-            print(f"✅ Comenzi sincronizate pe {g.name}: {[c.name for c in synced]}")
+        if TARGET_GUILD_ID:
+            guild_obj = discord.Object(id=TARGET_GUILD_ID)
+            synced = await bot.tree.sync(guild=guild_obj)
+            print(f"✅ Comenzi sincronizate pe guild-ul țintă: {TARGET_GUILD_ID} -> {[c.name for c in synced]}")
+        else:
+            # fallback: sincronizare pe fiecare guild (fără copy_global_to, ca să nu dublăm)
+            for g in bot.guilds:
+                synced = await bot.tree.sync(guild=discord.Object(id=g.id))
+                print(f"✅ Comenzi sincronizate pe {g.name}: {[c.name for c in synced]}")
     except Exception as e:
         print(f"Eroare la sync: {e}")
     update_ticket_status.start()  # rulează la 10 minute
+    print(f"🔑 Application ID: {APPLICATION_ID}")
+    print(f"🏠 Target Guild ID: {TARGET_GUILD_ID}")
+    print(f"🔐 Public Key set: {'DA' if PUBLIC_KEY else 'NU'}")
+    print(f"🔗 Invite URL (admin): {INVITE_URL}")
     print("🤵 Botul mafiot este online!")
 
 # ===== Helpers pentru emoji =====
