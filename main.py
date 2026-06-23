@@ -11,9 +11,10 @@ import threading
 from collections import defaultdict
 
 # === ROLURI PERMISE ===
-LEADER_ROLE_ID = 1427350315786567791
-COLEADER_ROLE_ID = 1427350740766167101
-ALLOWED_ROLE_IDS = {LEADER_ROLE_ID, COLEADER_ROLE_ID}
+LEADER_ROLE_ID = 1107100643291828224
+SECONDARY_LEADER_ROLE_ID = 1515017621127299303
+COLEADER_ROLE_ID = 1107099637644529684
+ALLOWED_ROLE_IDS = {LEADER_ROLE_ID, SECONDARY_LEADER_ROLE_ID, COLEADER_ROLE_ID}
 
 # Verificare token
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -111,13 +112,28 @@ def meta_from_emoji(e):
     # fallback
     return {"id": None, "name": str(e), "animated": False}, str(e)
 
-def build_reactions_snapshot(msg: discord.Message):
-    """Construiește setul ACTUAL de reacții (unic pe emoji), din mesaj."""
+async def build_reactions_snapshot(msg: discord.Message, guild: discord.Guild | None):
+    """Construiește setul reacțiilor VALIDE (unic pe emoji), din mesaj.
+
+    O reacție e validă doar dacă cel puțin un utilizator care a pus acel emoji
+    are unul dintre rolurile permise.
+    """
     metas = []
     displays = []
     seen = set()
     for r in msg.reactions:
-        # r.count > 0 => emoji prezent
+        has_allowed_reactor = False
+        async for user in r.users():
+            if user.id == bot.user.id:
+                continue
+            member = user if isinstance(user, discord.Member) else (guild.get_member(user.id) if guild else None)
+            if member and is_leader_or_coleader(member):
+                has_allowed_reactor = True
+                break
+
+        if not has_allowed_reactor:
+            continue
+
         m, disp = meta_from_emoji(r.emoji)
         key = m["id"] if m["id"] is not None else ("U", m["name"])
         if key in seen:
@@ -139,10 +155,10 @@ async def refresh_ticket_reactions(guild_id: int, channel_id: int, message_id: i
         msg = await channel.fetch_message(message_id)
     except Exception:
         return
-    metas, displays = build_reactions_snapshot(msg)
+    metas, displays = await build_reactions_snapshot(msg, guild)
     ticket["emojis_meta"] = metas
     ticket["emojis"] = displays
-    ticket["paid"] = bool(displays)  # plătit doar dacă există cel puțin o reacție
+    ticket["paid"] = bool(displays)  # plătit doar dacă există cel puțin o reacție validă
     save_backup()
 
 # ===== Reacții: sincronizare la ADD/REMOVE/CLEAR =====
@@ -259,7 +275,7 @@ async def ticket_command(interaction: Interaction, player_id: int):
     embed.add_field(name="⏱️ Start", value=format_hour_only(ticket['start']), inline=True)
     embed.add_field(name="🕒 Sfârșit", value=format_hour_only(ticket['end']), inline=True)
     embed.add_field(name="🤵‍♂️ Creat de", value=f"**{interaction.user.name}**", inline=False)
-    embed.set_footer(text="Status taxă: neplătită • Poți bifa cu orice emoji")
+    embed.set_footer(text="Status taxă: neplătită • Se iau în calcul doar reacțiile Lider/Lider Secundar/Colider")
     await interaction.response.send_message(embed=embed)
     msg = await interaction.original_response()
     ticket["message_id"] = msg.id
@@ -406,7 +422,7 @@ async def help_command(interaction: Interaction):
         "\n`/today` - Tickete create în ziua curentă (auto-delete în 2 min)"
         "\n`/cauta <ID>` - Caută tickete după ID (auto-delete în 2 min)"
         "\n`/raport` - (Lider/Colider) Raport complet + ștergeri"
-        "\n`/bifate` - (Lider/Colider) Număr de tickete bifate pe emoji (doar cele care sunt încă pe mesaje)"
+        "\n`/bifate` - (Lider/Lider Secundar/Colider) Număr de tickete bifate pe emoji (numai reacții valide)"
         "\n`/resync` - (Lider/Colider) Forțează sincronizarea comenzilor pe server"
     )
     await interaction.response.send_message(msg)
